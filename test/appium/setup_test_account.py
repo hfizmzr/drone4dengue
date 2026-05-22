@@ -66,6 +66,7 @@ def main() -> int:
             "MOBILE_TEST_PASSWORD": args.password,
             "TEST_EMAIL": args.email,
             "TEST_PASSWORD": args.password,
+            "TEST_COMPANY_ID": args.company_id,
         },
     )
     print(f"Updated Appium env file: {ENV_PATH}")

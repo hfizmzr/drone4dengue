@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const THIS_DIR = __dirname;
-const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const REPO_ROOT = path.resolve(THIS_DIR, '..', '..');
 const SERVER_DIR = path.join(REPO_ROOT, 'server-api');
 const SELENIUM_ENV_PATH = path.join(THIS_DIR, '.env');
 
