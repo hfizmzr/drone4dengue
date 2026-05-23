@@ -148,3 +148,51 @@ def test_password_mismatch(driver):
     except Exception:
         save_screenshot(driver, "fail_password_mismatch")
         raise
+
+
+# TC0302
+# TC-0304: Unregistered email → error shown
+def test_unregistered_email(driver):
+    driver.get(BASE_URL)
+    wait = WebDriverWait(driver, 10)
+    wait.until(EC.presence_of_element_located((By.ID, "email")))
+    driver.find_element(By.ID, "email").send_keys("notexist99999@test.com")
+    driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
+    try:
+        time.sleep(2)
+        body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+        assert "not found" in body_text or "invalid" in body_text or "error" in body_text or "wrong" in body_text
+        save_screenshot(driver, "pass_unregistered_reset_email")
+    except Exception:
+        save_screenshot(driver, "fail_unregistered_reset_email")
+        raise
+
+# TC-0306: Invalid email format → error shown
+def test_invalid_email_format(driver):
+    driver.get(BASE_URL)
+    wait = WebDriverWait(driver, 10)
+    wait.until(EC.presence_of_element_located((By.ID, "email")))
+    driver.find_element(By.ID, "email").send_keys("john")
+    driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
+    try:
+        time.sleep(2)
+        body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+        assert "valid" in body_text or "invalid" in body_text or "format" in body_text or "email" in body_text
+        save_screenshot(driver, "pass_invalid_email_format")
+    except Exception:
+        save_screenshot(driver, "fail_invalid_email_format")
+        raise
+
+# TC-0302: Sign in link → redirected back to Login
+def test_signin_redirect(driver):
+    driver.get(BASE_URL)
+    wait = WebDriverWait(driver, 10)
+    wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Sign in')]")))
+    driver.find_element(By.XPATH, "//*[contains(text(),'Sign in')]").click()
+    try:
+        time.sleep(2)
+        assert driver.current_url != "http://localhost:3000/forgot-password"
+        save_screenshot(driver, "pass_signin_redirect")
+    except Exception:
+        save_screenshot(driver, "fail_signin_redirect")
+        raise
