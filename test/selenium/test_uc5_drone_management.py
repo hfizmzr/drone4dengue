@@ -311,6 +311,80 @@ def _close_all_modals(driver):
         except Exception:
             pass
 
+def _create_new_location_in_modal(driver, name="Kuala Lumpur Office",
+                                   address="Kuala Lumpur, Malaysia"):
+    """Click '+' next to Operational Area and fill the new location modal.
+
+    Fires a synthetic Leaflet click event on the map at Kuala Lumpur
+    coordinates (3.1571°N, 101.7123°E) to set the marker.
+    The new location is auto-selected in the dropdown after creation.
+    """
+    # Click '+' button next to Operational Area
+    add_btn = wait_for_clickable(driver, By.XPATH,
+        "//label[contains(.,'Operational Area')]/following::button[1]")
+    add_btn.click()
+    time.sleep(0.5)
+
+    # Wait for the "Add New Operational Area" modal
+    wait_for_visible(driver, By.XPATH,
+        "//*[contains(text(),'Add New Operational Area')]")
+
+    # Fill location name
+    name_input = wait_for_visible(driver, By.XPATH,
+        "//label[contains(.,'Operational Area Name')]/following-sibling::input")
+    name_input.send_keys(name)
+
+    # Fill address
+    addr_input = driver.find_element(By.XPATH,
+        "//label[contains(.,'Operational Area Address')]/following-sibling::input")
+    addr_input.send_keys(address)
+
+    # Programmatically fire a Leaflet click event at Kuala Lumpur coordinates.
+    # We traverse the React fiber tree from .leaflet-container to find the
+    # Leaflet map instance, then fire a synthetic 'click' with the target latlng.
+    result = driver.execute_script("""
+        var c = document.querySelector('.leaflet-container');
+        if (!c) return 'no-container';
+        var k = Object.keys(c).find(function(k) {
+            return k.startsWith('__reactFiber$')
+                || k.startsWith('__reactInternalInstance$');
+        });
+        if (!k) return 'no-fiber';
+        var m = null;
+        (function walk(f) {
+            if (!f) return;
+            var h = f.memoizedState;
+            while (h) {
+                var v = h.memoizedState;
+                if (v && typeof v === 'object') {
+                    if (v.__version && v.map) { m = v.map; return; }
+                    if (v._container) { m = v; return; }
+                }
+                h = h.next;
+            }
+            walk(f.child);
+            walk(f.sibling);
+        })(c[k]);
+        if (!m) return 'no-map';
+        m.fire('click', { latlng: { lat: 3.1571, lng: 101.7123 } });
+        return 'ok';
+    """)
+    if result != 'ok':
+        pytest.fail(
+            f"Could not interact with Leaflet map to set coordinates "
+            f"(result: {result})"
+        )
+    time.sleep(1)
+
+    # Submit the new location
+    create_btn = wait_for_clickable(driver, By.XPATH,
+        "//button[contains(.,'Create Operational Area')]")
+    create_btn.click()
+
+    # Dismiss success alert ("Location created successfully!")
+    dismiss_any_dialog(driver, timeout=8)
+    time.sleep(0.5)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TC-05-001  Verify admin login, access drone module, and view drone list
@@ -411,64 +485,48 @@ class TestTC05003MapAssignmentAndPersistence:
     """
 
     def test_assign_location_and_persist(self, driver, drone_page):
-        """Steps 1-7: Create drone, assign location via dropdown, refresh, verify."""
+        """Steps 1-7: Create drone, create new location via '+' button, refresh, verify."""
         DRONE_TC_NAME = "TC5003 Location Test"
+        try:
+            # Step 1: Create a test drone
+            _create_drone(driver,
+                name=DRONE_TC_NAME, model="DJI Test",
+                serial="SN-TC5003-LOC", status="Operational",
+                select_location=False)
 
-        # Step 1: Create a test drone
-        _create_drone(driver,
-            name=DRONE_TC_NAME, model="DJI Test",
-            serial="SN-TC5003-LOC", status="Operational",
-            select_location=False)
+            # Step 2: Open Edit modal
+            rows = _find_drone_row(driver, DRONE_TC_NAME)
+            assert rows, "Test drone row not found"
+            edit_btn = rows[0].find_element(By.XPATH,
+                ".//button[@title='Edit Drone']")
+            edit_btn.click()
+            time.sleep(1)
 
-        # Step 2: Open Edit modal
-        rows = _find_drone_row(driver, DRONE_TC_NAME)
-        assert rows, "Test drone row not found"
-        edit_btn = rows[0].find_element(By.XPATH,
-            ".//button[@title='Edit Drone']")
-        edit_btn.click()
-        time.sleep(1)
+            # Step 3: Create a new operational location via '+' button
+            _create_new_location_in_modal(driver)
 
-        # Step 3: Change Operational Area dropdown
-        loc_select = _get_first_location_select(driver)
-        if loc_select:
-            sel = Select(loc_select)
-            opts = [o for o in sel.options if o.get_attribute("value")]
-            if len(opts) > 1:
-                opts[1].click()
-                driver.execute_script(
-                    "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
-                    loc_select)
-                time.sleep(0.5)
-            elif len(opts) == 1:
-                opts[0].click()
-                driver.execute_script(
-                    "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
-                    loc_select)
-                time.sleep(0.5)
-            else:
-                pytest.skip("No company locations available to assign")
-        else:
-            pytest.skip("Operational Area dropdown not found in Edit modal")
+            # Step 4: Save changes
+            save_btn = wait_for_clickable(driver, By.XPATH,
+                "//button[contains(.,'Save Changes')]")
+            save_btn.click()
+            dismiss_any_dialog(driver, timeout=8)
+            time.sleep(2)
 
-        # Step 4: Save changes
-        save_btn = wait_for_clickable(driver, By.XPATH,
-            "//button[contains(.,'Save Changes')]")
-        save_btn.click()
-        dismiss_any_dialog(driver, timeout=8)
-        time.sleep(2)
+            # Step 5-6: Refresh page
+            driver.refresh()
+            time.sleep(3)
+            wait_for(driver, EC.presence_of_element_located(
+                (By.XPATH, "//*[contains(text(),'Drone Management')]")), timeout=15)
 
-        # Step 5-6: Refresh page
-        driver.refresh()
-        time.sleep(3)
-        wait_for(driver, EC.presence_of_element_located(
-            (By.XPATH, "//*[contains(text(),'Drone Management')]")), timeout=15)
-
-        # Step 7: Verify drone still present (persistence confirmed)
-        assert DRONE_TC_NAME in driver.page_source, \
-            "Drone should persist after page refresh"
-
-        # Cleanup: delete the test drone
-        _delete_drone_no_assert(driver, DRONE_TC_NAME)
+            # Step 7: Verify drone still present (persistence confirmed)
+            assert DRONE_TC_NAME in driver.page_source, \
+                "Drone should persist after page refresh"
+        finally:
+            try:
+                go_to_drone_management(driver)
+            except Exception:
+                pass
+            _delete_drone_no_assert(driver, DRONE_TC_NAME)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
