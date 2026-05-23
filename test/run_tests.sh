@@ -27,21 +27,27 @@ mkdir -p reports
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
 # Detect custom label from -k argument
-REPORT_NAME="full_suite"
+REPORT_NAME="selenium_suite"
 
-if [[ "$*" == *"uc5"* ]]; then
+if [[ "$*" == *"uc2"* ]]; then
+    REPORT_NAME="uc2"
+elif [[ "$*" == *"uc4"* ]]; then
+    REPORT_NAME="uc4"
+elif [[ "$*" == *"uc5"* ]]; then
     REPORT_NAME="uc5"
 elif [[ "$*" == *"uc6"* ]]; then
     REPORT_NAME="uc6"
-elif [[ "$*" == *"TestTC507"* ]]; then
-    REPORT_NAME="TestTC507"
+elif [[ "$*" == *"uc10"* ]]; then
+    REPORT_NAME="uc10"
+elif [[ "$*" == *"uc12"* ]]; then
+    REPORT_NAME="uc12"
 fi
 
 REPORT_FILE="reports/${REPORT_NAME}_${TIMESTAMP}.html"
 
 echo "========================================"
 echo " Drone4Dengue Selenium Test Suite"
-echo " UC5 (Drone Management) + UC6 (Images)"
+echo " Selenium Web Tests (UC2, UC4, UC5, UC6, UC10, UC12)"
 echo " Admin Web: ${ADMIN_URL:-http://localhost:3000}"
 echo " Headless:  ${HEADLESS:-true}"
 echo "========================================"
@@ -51,6 +57,7 @@ echo ""
 python3 -m pytest \
     --html="$REPORT_FILE" \
     --self-contained-html \
+    selenium/ \
     "$@"
 
 echo ""

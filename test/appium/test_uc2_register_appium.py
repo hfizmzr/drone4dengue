@@ -7,6 +7,7 @@ import time
 import pytest
 
 from conftest import (
+    TEST_EMAIL,
     edit_texts,
     fill_edit_texts,
     fill_register_form,
@@ -125,3 +126,17 @@ def test_tc02_07_valid_registration_shows_success_and_returns_to_login(login_scr
     tap_text(driver, "OK")
 
     assert is_text_visible(driver, "Welcome Back", timeout=15)
+
+
+@pytest.mark.uc2
+@pytest.mark.appium
+def test_tc02_08_duplicate_email_rejected(login_screen):
+    """UC-2 exception: registering with an already-existing email shows an error."""
+    driver = login_screen
+
+    open_register_screen(driver)
+    fill_register_form(driver, TEST_EMAIL, VALID_PASSWORD)
+    tap_text(driver, "I agree")
+    tap_last_text(driver, "Create Account")
+
+    assert is_text_visible(driver, "already exists", timeout=15)

@@ -78,6 +78,7 @@ USE_WEBDRIVER_MANAGER = (
 
 def pytest_configure(config):
     """Register custom pytest markers used across the Selenium suites."""
+    config.addinivalue_line("markers", "uc2: UC-2 Register Account tests")
     config.addinivalue_line("markers", "uc4: UC-4 Edit Profile tests")
     config.addinivalue_line("markers", "uc5: UC-5 Drone Management tests")
     config.addinivalue_line("markers", "uc6: UC-6 Media Upload tests")
