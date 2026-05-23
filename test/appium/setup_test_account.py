@@ -19,7 +19,7 @@ ENV_PATH = THIS_DIR / ".env"
 
 DEFAULT_API_URL = "http://127.0.0.1:4000"
 DEFAULT_EMAIL = "appium.user@drone4dengue.local"
-DEFAULT_PASSWORD = "TestPass1!"
+DEFAULT_PASSWORD = "Test_Pass1"
 DEFAULT_COMPANY_ID = "comp-999"
 
 

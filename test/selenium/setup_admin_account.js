@@ -28,7 +28,7 @@ const DEFAULTS = {
   adminUrl: 'http://localhost:3000',
   apiUrl: 'http://localhost:4000',
   email: 'admin1@drone4dengue.com',
-  password: 'adminpass1',
+  password: 'Admin_pass1',
   name: 'Selenium Admin',
   username: 'seleniumadmin',
   phone: '60119990001',
