@@ -1,3 +1,4 @@
+
 import pytest
 import time
 from appium import webdriver
@@ -5,19 +6,20 @@ from appium.webdriver.common.appiumby import AppiumBy
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from appium.options.android import UiAutomator2Options
 # ─── CONFIGURATION ───────────────────────────────────────────────────
 APPIUM_SERVER = "http://127.0.0.1:4723"
-
 CAPS = {
     "platformName": "Android",
     "appium:deviceName": "Android Emulator",
     "appium:automationName": "UiAutomator2",
-    "appium:appPackage": "com.drone4dengue.mobile",
+    "appium:appPackage": "com.adamarbain.dengueeyemobileapp",
     "appium:appActivity": ".MainActivity",
     "appium:noReset": True,
 }
+options = UiAutomator2Options().load_capabilities(CAPS)
 
-REGISTERED_EMAIL = "boonzgame808@gmail.com"
+REGISTERED_EMAIL = "siu72655@gmail.com"
 UNREGISTERED_EMAIL = "notexist99999@test.com"
 INVALID_EMAIL = "john"
 
@@ -80,7 +82,10 @@ def close_modal(driver):
 
 @pytest.fixture(scope="function")
 def driver():
-    d = webdriver.Remote(APPIUM_SERVER, CAPS)
+    d = webdriver.Remote(
+        command_executor=APPIUM_SERVER,
+        options=options
+    )
     d.implicitly_wait(5)
     # Make sure we are on the login screen
     assert is_text_visible(d, "Welcome Back", timeout=15), \
