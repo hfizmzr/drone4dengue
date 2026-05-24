@@ -1,0 +1,6 @@
+date,location,activeCases,totalCases,coverageArea,status,source,latitude,longitude
+2024-01-15,Chow Kit,25,120,Chow Kit Area,Active Cases,csv,3.1569,101.7124
+2024-01-15,Petaling Jaya,10,45,SS2 Area,Hotspot,csv,3.1073,101.6067
+2024-01-16,Ampang,8,30,Ampang Jaya,Active Cases,csv,3.1480,101.7530
+2024-01-17,Setapak,14,60,Setapak Central,Hotspot,csv,3.2044,101.7199
+2024-01-18,Bangsar,5,22,Bangsar South,Active Cases,csv,3.1285,101.6765

@@ -1,0 +1,4 @@
+date,name,case_count,coverage_zone,record_status
+2024-05-01,Missing Location Area,12,Test Zone 1,Active Cases
+2024-05-02,Another Missing Area,7,Test Zone 2,Hotspot
+2024-05-03,Third Missing Area,3,Test Zone 3,Processing

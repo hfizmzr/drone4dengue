@@ -48,6 +48,8 @@ pip install -r selenium/requirements.txt
 
 ## Running Tests
 
+### UC2, UC4, UC5, UC6, UC10, UC12 — pytest suite (`run_tests.sh`)
+
 ```bash
 # All tests (headless Chrome)
 ./run_tests.sh
@@ -67,5 +69,47 @@ HEADLESS=false ./run_tests.sh
 # Run with custom credentials
 ADMIN_EMAIL=myadmin@example.com ADMIN_PASSWORD=mypass ./run_tests.sh
 ```
+
+---
+
+### TC-07 User Management — (`run_tc07.sh`)
+
+```bash
+# Run all TC-07 tests
+./run_tc07.sh
+
+# Run a single file by partial name
+./run_tc07.sh tc_07_001
+./run_tc07.sh tc_07_004
+
+# Run against a different environment
+ADMIN_URL=http://staging:3000 API_URL=http://staging:4000 ./run_tc07.sh
+
+# Run with custom credentials
+ADMIN_EMAIL=myadmin@example.com ADMIN_PASSWORD=mypass ./run_tc07.sh
+```
+
+HTML reports are saved to `test-reports/TC-07-*.html`.
+
+---
+
+### TC-08 Data Management — (`run_tc08.sh`)
+
+```bash
+# Run all TC-08 tests
+./run_tc08.sh
+
+# Run a single file by partial name
+./run_tc08.sh tc_08_001
+./run_tc08.sh tc_08_003
+
+# Run against a different environment
+ADMIN_URL=http://staging:3000 API_URL=http://staging:4000 ./run_tc08.sh
+
+# Run with custom credentials
+ADMIN_EMAIL=myadmin@example.com ADMIN_PASSWORD=mypass ./run_tc08.sh
+```
+
+HTML reports are saved to `test-reports/TC-08-*.html`.
 
 ---
