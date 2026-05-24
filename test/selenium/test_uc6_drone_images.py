@@ -36,7 +36,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 from conftest import (
-    ASSETS_DIR, TEST_IMAGE, TEST_PDF,
+    ASSETS_DIR, TEST_IMAGE, TEST_PDF, API_URL,
     wait_for, wait_for_clickable, wait_for_visible,
     accept_alert, dismiss_any_dialog, dismiss_confirm_and_success_dialog,
     go_to_drone_management, DEFAULT_WAIT,
@@ -56,6 +56,17 @@ def _select_drone_row(driver, index=0):
     if not rows or index >= len(rows):
         return False
     rows[index].click()
+    time.sleep(2)
+    return True
+
+
+def _select_drone_by_name(driver, name):
+    """Click a drone row whose name column matches *name*."""
+    rows = driver.find_elements(By.XPATH,
+        f"//tr[.//td[contains(.,'{name}')]]")
+    if not rows:
+        return False
+    rows[0].click()
     time.sleep(2)
     return True
 
@@ -268,6 +279,67 @@ def _ensure_pdf_exists():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Session-scoped fixtures — seed 2 drones so tests never run against an empty DB
+# ═════════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture(scope="session")
+def seeded_drones(admin_driver):
+    """Create 2 test drones via API, upload 1 image.
+
+    * Gallery drone (index 0 in DESC-order table) — has 1 pre-seeded image.
+    * Empty   drone (index 1) — has no images, used for ``No Images Available`` test.
+
+    Yields ``{"gallery": drone_dict, "empty": drone_dict, "token": str}``.
+    Cleans up (deletes both drones) after the session.
+    """
+    token = admin_driver.execute_script(
+        "return localStorage.getItem('token');")
+    if not token:
+        pytest.fail("No auth token found in localStorage after login")
+
+    headers = {"Authorization": f"Bearer {token}"}
+    ts = str(int(time.time() * 1000))
+
+    # Create empty drone first → appears at index 1 (newer drones come first)
+    resp_empty = requests.post(f"{API_URL}/drones/register",
+        json={"name": f"UC6-EMPTY-{ts}", "model": "EmptyModel",
+              "serial": f"UC6-EMPTY-{ts}", "status": "Operational"},
+        headers=headers, timeout=10)
+    resp_empty.raise_for_status()
+    empty_drone = resp_empty.json()["drone"]
+
+    # Create gallery drone second → appears at index 0
+    resp_gallery = requests.post(f"{API_URL}/drones/register",
+        json={"name": f"UC6-GALLERY-{ts}", "model": "GalleryModel",
+              "serial": f"UC6-GALLERY-{ts}", "status": "Operational"},
+        headers=headers, timeout=10)
+    resp_gallery.raise_for_status()
+    gallery_drone = resp_gallery.json()["drone"]
+
+    # Upload a test image to the gallery drone
+    image_path = str(ASSETS_DIR / "test_image.png")
+    if os.path.isfile(image_path):
+        with open(image_path, "rb") as fh:
+            requests.post(f"{API_URL}/drones/{gallery_drone['id']}/upload-images",
+                files={"images": ("test_image.png", fh, "image/png")},
+                headers=headers, timeout=30)
+
+    yield {
+        "gallery": gallery_drone,
+        "empty": empty_drone,
+        "token": token,
+    }
+
+    # Teardown: delete both drones (best-effort)
+    for d in [empty_drone, gallery_drone]:
+        try:
+            requests.delete(f"{API_URL}/drones/{d['id']}",
+                headers=headers, timeout=10)
+        except Exception:
+            pass
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # TC-06-001  Verify image display and detail viewing
 # Covers: UC6-COV-01, UC6-COV-02, UC6-COV-03
 # ═════════════════════════════════════════════════════════════════════════════
@@ -280,25 +352,26 @@ class TestTC06001ImageDisplayAndDetails:
     UC6-COV-03 (view metadata).
     """
 
-    def test_drone_images_section_exists(self, driver, drone_page):
+    def test_drone_images_section_exists(self, driver, drone_page, seeded_drones):
         """Step 1 – 'Drone Images' section header is present."""
         assert "Drone Images" in driver.page_source, \
             "'Drone Images' section not found on page"
 
-    def test_gallery_renders_after_selecting_drone(self, driver, drone_page):
+    def test_gallery_renders_after_selecting_drone(self, driver, drone_page, seeded_drones):
         """Step 2 – Selecting a drone renders the gallery without crash."""
-        _select_drone_row(driver)
-        src = driver.page_source
-        assert "Drone Images" in src
+        assert _select_drone_by_name(driver, seeded_drones["gallery"]["name"]), \
+            "Gallery drone row not found"
+        cards = _get_image_cards(driver)
+        assert len(cards) > 0, \
+            "Expected at least one image card in the gallery"
 
-    def test_image_cards_show_metadata(self, driver, drone_page):
+    def test_image_cards_show_metadata(self, driver, drone_page, seeded_drones):
         """Step 3 – If images exist, verify metadata is displayed."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         image_cards = _get_image_cards(driver)
-        if not image_cards:
-            pytest.skip("Selected drone has no images — metadata not testable")
+        assert image_cards, "Gallery drone should have pre-seeded images"
 
         src = driver.page_source
         has_metadata = (
@@ -324,13 +397,12 @@ class TestTC06002ImageManipulation:
     UC6-COV-06 (remove image).
     """
 
-    def test_upload_image_file(self, driver, drone_page):
+    def test_upload_image_file(self, driver, drone_page, seeded_drones):
         """Steps 1-3: Upload an image file and verify it is accepted."""
         if not os.path.isfile(TEST_IMAGE):
             pytest.skip(f"Test image not found at {TEST_IMAGE}")
-        if not _open_add_images_modal(driver):
-            pytest.skip("No 'Add Images' button — no drones in DB")
 
+        _open_add_images_modal(driver)
         _upload_file_to_modal(driver, TEST_IMAGE)
 
         file_name = os.path.basename(TEST_IMAGE)
@@ -343,13 +415,12 @@ class TestTC06002ImageManipulation:
 
         _close_modal(driver)
 
-    def test_upload_video_file(self, driver, drone_page):
+    def test_upload_video_file(self, driver, drone_page, seeded_drones):
         """Steps 4-5: Upload a video file and verify 'Process Video' button."""
         if not os.path.isfile(TEST_VIDEO_PATH):
             pytest.skip("test_video.mp4 not in assets/")
-        if not _open_add_images_modal(driver):
-            pytest.skip("No drones available")
 
+        _open_add_images_modal(driver)
         _upload_file_to_modal(driver, TEST_VIDEO_PATH)
 
         src = driver.page_source
@@ -362,7 +433,7 @@ class TestTC06002ImageManipulation:
         assert process_btns, "Process Video button not found"
         _close_modal(driver)
 
-    def test_reject_unsupported_file(self, driver, drone_page):
+    def test_reject_unsupported_file(self, driver, drone_page, seeded_drones):
         """Verify unsupported file triggers alert"""
         _ensure_pdf_exists()
         assert _open_add_images_modal(driver), "No drones available"
@@ -372,14 +443,13 @@ class TestTC06002ImageManipulation:
         assert msg is not None, "Expected alert but none appeared"
         assert "upload an image or video" in msg.lower()
 
-    def test_view_image_lightbox(self, driver, drone_page):
+    def test_view_image_lightbox(self, driver, drone_page, seeded_drones):
         """Steps 8-9: Click eye icon to enlarge image, then close lightbox."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         image_cards = _get_image_cards(driver)
-        if not image_cards:
-            pytest.skip("No images in gallery — run TC-06-002 upload first")
+        assert image_cards, "Gallery drone should have pre-seeded images"
 
         _hover_image_card(driver, image_cards[0])
 
@@ -401,20 +471,19 @@ class TestTC06002ImageManipulation:
             "//div[contains(@class,'fixed') and contains(@class,'bg-black/90')]")
         assert not overlays_after, "Lightbox did not close"
 
-    def test_download_image(self, driver, drone_page):
+    def test_download_image(self, driver, drone_page, seeded_drones):
         """Steps 12-14: Download an image file and verify it has content."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
         _download_first_image(driver)
 
-    def test_edit_metadata(self, driver, drone_page):
+    def test_edit_metadata(self, driver, drone_page, seeded_drones):
         """Steps 15-17: Attempt to edit image metadata/notes; assert not implemented (xfail)."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         image_cards = _get_image_cards(driver)
-        if not image_cards:
-            pytest.skip("No images in gallery — upload an image first")
+        assert image_cards, "Gallery drone should have pre-seeded images"
 
         _hover_image_card(driver, image_cards[0])
 
@@ -463,14 +532,13 @@ class TestTC06002ImageManipulation:
             "current build."
         )
 
-    def test_delete_image(self, driver, drone_page):
+    def test_delete_image(self, driver, drone_page, seeded_drones):
         """Steps 10-11: Delete an image with confirmation dialog."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         image_cards = _get_image_cards(driver)
-        if not image_cards:
-            pytest.skip("No images to delete — run TC-06-002 upload first")
+        assert image_cards, "Gallery drone should have pre-seeded images"
 
         initial_count = len(image_cards)
 
@@ -497,7 +565,7 @@ class TestTC06002ImageManipulation:
         time.sleep(1)
 
         go_to_drone_management(driver)
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
         new_cards = _get_image_cards(driver)
         assert (len(new_cards) < initial_count or len(new_cards) == 0), \
@@ -516,9 +584,9 @@ class TestTC06003RefreshAndUploadingStatus:
     UC6-COV-08 (show "Uploading..." / processing indicator).
     """
 
-    def test_gallery_persists_after_refresh(self, driver, drone_page):
+    def test_gallery_persists_after_refresh(self, driver, drone_page, seeded_drones):
         """Steps 1-3: Refresh page, verify images still load."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         before_cards = _get_image_cards(driver)
@@ -529,7 +597,7 @@ class TestTC06003RefreshAndUploadingStatus:
         wait_for(driver, EC.presence_of_element_located(
             (By.XPATH, "//*[contains(text(),'Drone Management')]")), timeout=15)
 
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         after_cards = _get_image_cards(driver)
@@ -538,13 +606,12 @@ class TestTC06003RefreshAndUploadingStatus:
         assert after_count == before_count, \
             f"Image count should persist after refresh ({before_count} → {after_count})"
 
-    def test_video_processing_indicator(self, driver, drone_page):
+    def test_video_processing_indicator(self, driver, drone_page, seeded_drones):
         """Steps 4-5: Upload video, verify processing progress indicator."""
         if not os.path.isfile(TEST_VIDEO_PATH):
             pytest.skip("test_video.mp4 not in assets/")
-        if not _open_add_images_modal(driver):
-            pytest.skip("No drones available")
 
+        _open_add_images_modal(driver)
         _upload_file_to_modal(driver, TEST_VIDEO_PATH)
 
         if not _click_modal_button(driver, "Process Video"):
@@ -574,16 +641,16 @@ class TestTC06004NoImagesScenario:
     Covers UC6-COV-09 (empty state message).
     """
 
-    def test_empty_gallery_message(self, driver, drone_page):
+    def test_empty_gallery_message(self, driver, drone_page, seeded_drones):
         """Steps 1-5: Select drone with no images, verify empty state."""
-        _select_drone_row(driver, index=1)
+        _select_drone_by_name(driver, seeded_drones["empty"]["name"])
         time.sleep(2)
 
         src = driver.page_source
         image_cards = _get_image_cards(driver)
 
-        if image_cards:
-            pytest.skip("Selected drone has images — empty state not testable")
+        assert not image_cards, \
+            "Empty drone should have no image cards"
 
         assert "No Images Available" in src, \
             "'No Images Available' heading not shown"
@@ -605,9 +672,9 @@ class TestTC06005BulkDeleteAndServerError:
     UC6-COV-11 (error handling for server crash).
     """
 
-    def test_bulk_delete_attempt_fails(self, driver, drone_page):
+    def test_bulk_delete_attempt_fails(self, driver, drone_page, seeded_drones):
         """Steps 1-5: Attempt the full bulk-delete workflow; assert it fails (not implemented)."""
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         checkbox_selectors = [
@@ -669,13 +736,13 @@ class TestTC06005BulkDeleteAndServerError:
                 "Feature UC6-COV-10 is not yet implemented."
             )
 
-    def test_server_error_graceful_handling(self, driver, drone_page):
+    def test_server_error_graceful_handling(self, driver, drone_page, seeded_drones):
         """Steps 4-6: Simulate 500 on image fetch; verify page doesn't crash."""
         go_to_drone_management(driver)
 
         _override_fetch_500_for_images(driver)
 
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(3)
 
         src = driver.page_source
@@ -703,13 +770,13 @@ class TestTC06005BulkDeleteAndServerError:
 
         _restore_fetch(driver)
 
-    def test_page_recovers_after_error(self, driver, drone_page):
+    def test_page_recovers_after_error(self, driver, drone_page, seeded_drones):
         """Step 7: After restoring normal fetch, page works normally."""
         go_to_drone_management(driver)
 
         _override_fetch_500_for_images(driver, var_name="__origFetch2")
 
-        _select_drone_row(driver)
+        _select_drone_by_name(driver, seeded_drones["gallery"]["name"])
         time.sleep(2)
 
         _restore_fetch(driver, var_name="__origFetch2")

@@ -24,6 +24,7 @@ NOTE on dialogs
 """
 
 import time
+import requests
 import pytest
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
@@ -31,17 +32,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 from conftest import (
-    BASE_URL,
+    API_URL, BASE_URL,
     wait_for, wait_for_element, wait_for_clickable, wait_for_visible,
     accept_alert, dismiss_any_dialog, dismiss_confirm_and_success_dialog,
     go_to_drone_management, DEFAULT_WAIT,
 )
 
 # ── Test data ────────────────────────────────────────────────────────────────
-DRONE_NAME     = "DJI Alpha"
+_TS = str(int(time.time() * 1000))
+DRONE_NAME     = f"DJI Alpha-{_TS}"
 DRONE_MODEL    = "DJI Mini 3"
-DRONE_SERIAL   = "SN-UC5-TEST-001"
-DRONE_NAME_UPD = "DJI Alpha Updated"
+DRONE_SERIAL   = f"SN-UC5-TEST-{_TS}"
+DRONE_NAME_UPD = f"DJI Alpha Updated-{_TS}"
 NO_MATCH_TERM  = "ZZZNOMATCH999"
 
 EXPECTED_COLUMNS = [
@@ -387,6 +389,35 @@ def _create_new_location_in_modal(driver, name="Kuala Lumpur Office",
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Session-scoped cleanup — delete leftover test drones after all UC-5 tests
+# ═════════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_uc5_drones(admin_driver):
+    """Delete any leftover test-created drones after the UC-5 session.
+    Matches drones by name prefix (``DJI Alpha-`` / ``TC5003 Location Test-``).
+    """
+    yield
+    token = admin_driver.execute_script(
+        "return localStorage.getItem('token');")
+    if not token:
+        return
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        resp = requests.get(f"{API_URL}/drones", headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        drones = data.get("drones") or (data if isinstance(data, list) else [])
+        for d in drones:
+            name = d.get("name", "")
+            if name.startswith("DJI Alpha-") or name.startswith("TC5003 Location Test-"):
+                requests.delete(f"{API_URL}/drones/{d['id']}",
+                    headers=headers, timeout=10)
+    except Exception:
+        pass
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # TC-05-001  Verify admin login, access drone module, and view drone list
 # Covers: UC5-COV-01, UC5-COV-02
 # ═════════════════════════════════════════════════════════════════════════════
@@ -486,12 +517,14 @@ class TestTC05003MapAssignmentAndPersistence:
 
     def test_assign_location_and_persist(self, driver, drone_page):
         """Steps 1-7: Create drone, create new location via '+' button, refresh, verify."""
-        DRONE_TC_NAME = "TC5003 Location Test"
+        _ts = str(int(time.time() * 1000))
+        DRONE_TC_NAME = f"TC5003 Location Test-{_ts}"
+        DRONE_TC_SERIAL = f"SN-TC5003-{_ts}"
         try:
             # Step 1: Create a test drone
             _create_drone(driver,
                 name=DRONE_TC_NAME, model="DJI Test",
-                serial="SN-TC5003-LOC", status="Operational",
+                serial=DRONE_TC_SERIAL, status="Operational",
                 select_location=False)
 
             # Step 2: Open Edit modal
