@@ -68,7 +68,6 @@ def submit_email(driver, email):
 
 
 def email_send_success(body_text):
-    # First check if backend returned any known error
     backend_errors = [
         "email configuration error",
         "missing credentials",
@@ -79,8 +78,11 @@ def email_send_success(body_text):
     for err in backend_errors:
         if err in body_text:
             return False
-    # Then check if real success markers exist
+
     success_markers = [
+        "enter the code",      # matches your UI
+        "reset code",          # matches your UI
+        "verify code",         # matches your UI
         "enter code",
         "verification code",
         "check your email",
@@ -88,16 +90,17 @@ def email_send_success(body_text):
     ]
     return any(marker in body_text for marker in success_markers)
 
-
 # TC-0301: Valid registered email → reset code sent
 def test_valid_registered_email(driver):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 10)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
-    driver.find_element(By.ID, "email").send_keys("boonzgame808@gmail.com")
+    driver.find_element(By.ID, "email").send_keys("siu72655@gmail.com")
     driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
     try:
-        time.sleep(3)
+        wait.until(
+            EC.presence_of_element_located((By.XPATH, "//button[contains(text(),'VERIFY CODE')]"))
+        )
         body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
         assert email_send_success(body_text), "Email send failed — backend returned error or no success confirmation"
         save_screenshot(driver, "pass_valid_reset_email")
@@ -106,15 +109,16 @@ def test_valid_registered_email(driver):
         raise
 
 
-# TC-0303: Resend code option available after submitting valid email
 def test_resend_code(driver):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 10)
     wait.until(EC.presence_of_element_located((By.ID, "email")))
-    driver.find_element(By.ID, "email").send_keys("boonzgame808@gmail.com")
+    driver.find_element(By.ID, "email").send_keys("siu72655@gmail.com")
     driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
     try:
-        time.sleep(3)
+        wait.until(
+            EC.presence_of_element_located((By.XPATH, "//button[contains(text(),'VERIFY CODE')]"))
+        )
         body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
         assert email_send_success(body_text), "Email send failed — resend option unreachable"
         assert "resend" in body_text, "Resend option not visible after successful code send"
@@ -122,33 +126,88 @@ def test_resend_code(driver):
     except Exception:
         save_screenshot(driver, "fail_resend_code")
         raise
-
-
 # TC-0305: Mismatching passwords → re-entry prompted
 def test_password_mismatch(driver):
     driver.get(BASE_URL)
-    wait = WebDriverWait(driver, 10)
-    wait.until(EC.presence_of_element_located((By.ID, "email")))
-    driver.find_element(By.ID, "email").send_keys("boonzgame808@gmail.com")
-    driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
-    time.sleep(3)
-    body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-    if not email_send_success(body_text):
-        pytest.skip("SEND CODE failed — password mismatch step unreachable")
-    try:
-        new_pass_fields = driver.find_elements(By.XPATH, "//input[@type='password']")
-        assert len(new_pass_fields) >= 2, "Password fields not found after code send"
-        new_pass_fields[0].send_keys("NewPass123")
-        new_pass_fields[1].send_keys("DifferentPass999")
-        driver.find_element(By.XPATH, "//button[@type='submit']").click()
-        time.sleep(2)
-        body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-        assert "match" in body_text or "mismatch" in body_text or "same" in body_text
-        save_screenshot(driver, "pass_password_mismatch")
-    except Exception:
-        save_screenshot(driver, "fail_password_mismatch")
-        raise
 
+    wait = WebDriverWait(driver, 10)
+
+    wait.until(
+        EC.presence_of_element_located((By.ID, "email"))
+    )
+
+    driver.find_element(
+        By.ID,
+        "email"
+    ).send_keys("siu72655@gmail.com")
+
+    driver.find_element(
+        By.XPATH,
+        "//button[contains(text(),'SEND CODE')]"
+    ).click()
+
+    wait.until(
+        EC.presence_of_element_located(
+            (By.XPATH, "//button[contains(text(),'VERIFY CODE')]")
+        )
+    )
+
+    body_text = driver.find_element(
+        By.TAG_NAME,
+        "body"
+    ).text.lower()
+
+    assert email_send_success(body_text), \
+        "SEND CODE failed"
+
+    code_field = driver.find_element(
+        By.ID,
+        "code"
+    )
+
+    code_field.send_keys("123456")
+
+    driver.find_element(
+        By.XPATH,
+        "//button[contains(text(),'VERIFY CODE')]"
+    ).click()
+
+    wait.until(
+        EC.presence_of_element_located(
+            (By.XPATH, "//button[contains(text(),'RESET PASSWORD')]")
+        )
+    )
+
+    new_pass_fields = driver.find_elements(
+        By.XPATH,
+        "//input[@type='password']"
+    )
+
+    assert len(new_pass_fields) >= 2, \
+        "Password fields not found"
+
+    new_pass_fields[0].send_keys("NewPass123!")
+    new_pass_fields[1].send_keys("DifferentPass999!")
+
+    driver.find_element(
+        By.XPATH,
+        "//button[contains(text(),'RESET PASSWORD')]"
+    ).click()
+
+    time.sleep(1)
+
+    body_text = driver.find_element(
+        By.TAG_NAME,
+        "body"
+    ).text.lower()
+
+    assert (
+        "do not match" in body_text
+        or
+        "match" in body_text
+    ), "Password mismatch validation not shown"
+
+    save_screenshot(driver, "pass_password_mismatch")
 
 # TC0302
 # TC-0304: Unregistered email → error shown

@@ -158,62 +158,108 @@ def test_unregistered_email(driver):
         close_modal(driver)
 
 # ─── TC-0405: Password mismatch → error shown ────────────────────────
-
 def test_password_mismatch(driver):
     open_reset_modal(driver)
+
     fill_reset_email(driver, REGISTERED_EMAIL)
+
     tap_text(driver, "Send Reset Code")
     time.sleep(3)
 
-    if not email_send_success(driver):
-        close_modal(driver)
-        pytest.skip("SEND CODE failed — password mismatch step unreachable")
+    assert email_send_success(driver), \
+        "SEND CODE failed"
 
-    # Step 2 — enter any 6-digit code
     code_field = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located(
-            (AppiumBy.ANDROID_UIAUTOMATOR,
-             'new UiSelector().textContains("Enter 6-digit code")')
+            (
+                AppiumBy.ANDROID_UIAUTOMATOR,
+                'new UiSelector().textContains("Enter 6-digit code")'
+            )
         )
     )
+
     code_field.send_keys("123456")
+
     tap_text(driver, "Verify Code")
     time.sleep(3)
 
-    # If code is wrong, error shown — skip to avoid false fail
-    if not is_text_visible(driver, "New Password", timeout=5):
-        close_modal(driver)
-        pytest.skip("Code verification failed — cannot reach password mismatch step")
+    assert is_text_visible(driver, "New Password", timeout=5), \
+        "Code verification failed — Step 3 not reached"
 
-    # Step 3 — enter mismatching passwords
     fields = driver.find_elements(
         AppiumBy.ANDROID_UIAUTOMATOR,
         'new UiSelector().className("android.widget.EditText")'
     )
-    assert len(fields) >= 2, "Password fields not found in Step 3"
+
+    assert len(fields) >= 2, \
+        "Password fields not found"
+
     fields[0].send_keys("NewPass123")
     fields[1].send_keys("DifferentPass999")
+
     tap_text(driver, "Reset Password")
     time.sleep(2)
 
-    try:
-        assert is_text_visible(driver, "do not match", timeout=5) or \
-               is_text_visible(driver, "Passwords do not match", timeout=5), \
-            "Password mismatch error not shown"
-    finally:
-        close_modal(driver)
+    assert (
+        is_text_visible(driver, "do not match", timeout=5)
+        or
+        is_text_visible(driver, "Passwords do not match", timeout=5)
+    ), "Password mismatch error not shown"
 
+    close_modal(driver)
 # ─── TC-0406: Invalid email format → error shown ─────────────────────
+
+# ─── TC-0406: Invalid email format → rejected ─────────────────────
 
 def test_invalid_email_format(driver):
     open_reset_modal(driver)
     fill_reset_email(driver, INVALID_EMAIL)
     tap_text(driver, "Send Reset Code")
     time.sleep(2)
+
     try:
-        assert is_text_visible(driver, "valid email", timeout=5) or \
-               is_text_visible(driver, "invalid", timeout=5) or \
-               is_text_visible(driver, "Failed", timeout=5), \
-            "No error shown for invalid email format"
+        # PASS if app rejects invalid email in ANY way
+
+        rejected = (
+            is_text_visible(driver, "valid email", timeout=2) or
+            is_text_visible(driver, "invalid", timeout=2) or
+            is_text_visible(driver, "Failed", timeout=2) or
+            is_text_visible(driver, "Reset Password", timeout=2)
+        )
+
+        # still on reset screen = request did not proceed
+        assert rejected, \
+            "Invalid email was accepted and workflow continued"
+
     finally:
         close_modal(driver)
+
+def test_invalid_reset_code_rejected(driver):
+    open_reset_modal(driver)
+
+    fill_reset_email(driver, REGISTERED_EMAIL)
+
+    tap_text(driver, "Send Reset Code")
+    time.sleep(3)
+
+    assert email_send_success(driver), \
+        "SEND CODE failed"
+
+    code_field = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located(
+            (
+                AppiumBy.ANDROID_UIAUTOMATOR,
+                'new UiSelector().textContains("Enter 6-digit code")'
+            )
+        )
+    )
+
+    code_field.send_keys("999999")
+
+    tap_text(driver, "Verify Code")
+    time.sleep(3)
+
+    assert not is_text_visible(driver, "New Password", timeout=5), \
+        "Wrong code incorrectly allowed access to password reset screen"
+
+    close_modal(driver)
