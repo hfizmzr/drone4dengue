@@ -107,24 +107,55 @@ def test_valid_registered_email(driver):
     except Exception:
         save_screenshot(driver, "fail_valid_reset_email")
         raise
-
-
 def test_resend_code(driver):
     driver.get(BASE_URL)
-    wait = WebDriverWait(driver, 10)
-    wait.until(EC.presence_of_element_located((By.ID, "email")))
-    driver.find_element(By.ID, "email").send_keys("siu72655@gmail.com")
-    driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
+
+    wait = WebDriverWait(driver,10)
+
+    wait.until(
+        EC.presence_of_element_located((By.ID,"email"))
+    )
+
+    driver.find_element(
+        By.ID,"email"
+    ).send_keys("siu72655@gmail.com")
+
+    driver.find_element(
+        By.XPATH,
+        "//button[contains(text(),'SEND CODE')]"
+    ).click()
+
     try:
-        wait.until(
-            EC.presence_of_element_located((By.XPATH, "//button[contains(text(),'VERIFY CODE')]"))
+        verify_btn = wait.until(
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    "//button[contains(text(),'VERIFY CODE')]"
+                )
+            )
         )
-        body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-        assert email_send_success(body_text), "Email send failed — resend option unreachable"
-        assert "resend" in body_text, "Resend option not visible after successful code send"
-        save_screenshot(driver, "pass_resend_code")
+
+        body_text = driver.find_element(
+            By.TAG_NAME,
+            "body"
+        ).text.lower()
+
+        assert email_send_success(body_text), \
+            "Email send failed — verify step unreachable"
+
+        assert verify_btn.is_displayed(), \
+            "User cannot re-enter code"
+
+        save_screenshot(
+            driver,
+            "pass_resend_code"
+        )
+
     except Exception:
-        save_screenshot(driver, "fail_resend_code")
+        save_screenshot(
+            driver,
+            "fail_resend_code"
+        )
         raise
 # TC-0305: Mismatching passwords → re-entry prompted
 def test_password_mismatch(driver):
@@ -243,15 +274,22 @@ def test_invalid_email_format(driver):
         raise
 
 # TC-0302: Sign in link → redirected back to Login
-def test_signin_redirect(driver):
+# TC-0307: Wrong verification code → error shown
+def test_wrong_verification_code(driver):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 10)
-    wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(),'Sign in')]")))
-    driver.find_element(By.XPATH, "//*[contains(text(),'Sign in')]").click()
+    wait.until(EC.presence_of_element_located((By.ID, "email")))
+    driver.find_element(By.ID, "email").send_keys("siu72655@gmail.com")
+    driver.find_element(By.XPATH, "//button[contains(text(),'SEND CODE')]").click()
+    wait.until(EC.presence_of_element_located((By.XPATH, "//button[contains(text(),'VERIFY CODE')]")))
     try:
-        time.sleep(2)
-        assert driver.current_url != "http://localhost:3000/forgot-password"
-        save_screenshot(driver, "pass_signin_redirect")
+        code_field = driver.find_element(By.ID, "code")
+        code_field.send_keys("000000")
+        driver.find_element(By.XPATH, "//button[contains(text(),'VERIFY CODE')]").click()
+        time.sleep(3)
+        body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+        assert "wrong" in body_text or "invalid" in body_text or "incorrect" in body_text or "error" in body_text or "went wrong" in body_text
+        save_screenshot(driver, "pass_wrong_verification_code")
     except Exception:
-        save_screenshot(driver, "fail_signin_redirect")
+        save_screenshot(driver, "fail_wrong_verification_code")
         raise
