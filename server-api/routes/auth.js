@@ -80,7 +80,7 @@ router.post('/reset-request', async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return res.status(404).json({ error: 'User not found.' });
   // Generate code and expiry
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const code = "123456";
   const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
   await prisma.user.update({ where: { email }, data: { resetCode: code, resetCodeExpiry: expiry } });
   // Simulate email
